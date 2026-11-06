@@ -1,0 +1,6 @@
+Order_ID,Product,Quantity,Priority,Processing_Time,Deadline,Required_Machine
+ORD-201,Assembly Batch A,120,High,75,11:30,Machine A
+ORD-202,Component Batch B,80,Medium,50,13:00,
+ORD-203,Quality Test C,60,High,40,12:00,Machine B
+ORD-204,Packaging Batch D,150,Low,55,16:30,
+ORD-205,Urgent Rework E,35,High,30,10:30,

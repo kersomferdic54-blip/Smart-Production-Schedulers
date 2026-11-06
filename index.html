@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IndustriFlow | Smart Production Scheduler</title>
+  
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.7">
+          <path d="M4 19V9l4-3v13M8 19V5l5-2v16M13 19v-8l7-3v11"/>
+          <path d="M2 19h20M16 11h1M16 14h1M5.5 11h1M10 7h1"/>
+        </svg>
+      </div>
+      <div><b>IndustriFlow</b><span>Smart Production Scheduler</span></div>
+    </div>
+
+    <nav class="nav">
+      <a class="active" href="#dashboard">⌂ Dashboard</a>
+      <a href="#input">＋ Orders & Input</a>
+      <a href="#machines">⚙ Machines</a>
+      <a href="#schedule">▦ Schedule</a>
+      <a href="#results">◫ Results</a>
+    </nav>
+
+    <div class="side-note">
+      <b style="color:#dce7f7">Prototype mode</b><br>
+      Designed for general manufacturing: electronics, automotive, machining, assembly and similar production environments.
+    </div>
+  </aside>
+
+  <main>
+    <section id="dashboard">
+      <div class="topbar">
+        <div class="title">
+          <h1>Smart Production Scheduling Dashboard</h1>
+          <p>Enter production orders manually or upload a CSV. Configure machines, generate a priority-aware schedule, and review utilization, waiting time and delays in one place.</p>
+        </div>
+        <div class="status-pill"><span class="dot"></span> Scheduler ready</div>
+      </div>
+
+      <div class="cards">
+        <div class="metric"><div class="label">Orders Loaded</div><div id="mOrders" class="value">0</div><div class="hint">Manual + CSV inputs</div></div>
+        <div class="metric"><div class="label">Machines</div><div id="mMachines" class="value">3</div><div class="hint">Available production resources</div></div>
+        <div class="metric"><div class="label">High Priority</div><div id="mHigh" class="value">0</div><div class="hint">Urgent production orders</div></div>
+        <div class="metric"><div class="label">Scheduled</div><div id="mScheduled" class="value">0</div><div class="hint">Orders assigned to machines</div></div>
+      </div>
+    </section>
+
+    <section id="input" class="grid-2">
+      <div class="panel">
+        <h2>Add Production Orders</h2>
+        <p class="sub">Choose the easiest method. Manual entry is ideal for a few orders; CSV upload is better for larger batches.</p>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="manual">Manual Entry</button>
+          <button class="tab" data-tab="csv">CSV Upload</button>
+        </div>
+
+        <div id="manual" class="tab-pane active">
+          <div class="form-grid">
+            <div class="field"><label>Order ID</label><input id="orderId" placeholder="e.g. ORD-101"></div>
+            <div class="field"><label>Product / Job Name</label><input id="product" placeholder="e.g. Assembly Batch A"></div>
+            <div class="field"><label>Quantity</label><input id="quantity" type="number" min="1" value="100"></div>
+            <div class="field"><label>Priority</label>
+              <select id="priority"><option>High</option><option selected>Medium</option><option>Low</option></select>
+            </div>
+            <div class="field"><label>Processing Time (minutes)</label><input id="processing" type="number" min="1" value="45"></div>
+            <div class="field"><label>Deadline (HH:MM)</label><input id="deadline" type="time" value="14:00"></div>
+            <div class="field full"><label>Preferred / Required Machine</label>
+              <select id="requiredMachine"><option value="">Auto-select earliest available machine</option></select>
+              <div class="help">Leave this as Auto if any machine can process the job.</div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn" id="addOrderBtn">Add Order</button>
+            <button class="btn secondary" id="loadDemoBtn">Load Demo Data</button>
+          </div>
+        </div>
+
+        <div id="csv" class="tab-pane">
+          <div class="dropzone">
+            <strong>Upload production orders as CSV</strong>
+            <span>The first row should contain the column names shown below.</span>
+            <input id="csvFile" type="file" accept=".csv,text/csv">
+          </div>
+          <div class="csv-format">
+            <code>Order_ID,Product,Quantity,Priority,Processing_Time,Deadline,Required_Machine</code>
+          </div>
+          <p class="footer-note">Accepted priorities: High, Medium, Low. Required_Machine can be left blank to let the scheduler choose automatically.</p>
+        </div>
+      </div>
+
+      <div id="machines" class="panel">
+        <h2>Machine Configuration</h2>
+        <p class="sub">Define the production resources that are available to the scheduling algorithm.</p>
+        <div class="machines" id="machineList"></div>
+        <div class="actions">
+          <button class="btn secondary" id="addMachineBtn">+ Add Machine</button>
+        </div>
+        <p class="footer-note">Capacity is shown as an easy-to-understand relative value. Availability determines the earliest minute at which the machine can start processing.</p>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:20px">
+      <div class="section-head">
+        <div>
+          <h2>Order Queue</h2>
+          <p class="sub" style="margin-bottom:0">Review the data before generating the schedule.</p>
+        </div>
+        <div class="right">
+          <button class="btn secondary" id="clearOrdersBtn">Clear Orders</button>
+          <button class="btn warn" id="generateBtn">Generate Schedule</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Order ID</th><th>Product</th><th>Qty</th><th>Priority</th><th>Processing</th><th>Deadline</th><th>Machine</th><th></th></tr>
+          </thead>
+          <tbody id="ordersBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="schedule" class="panel" style="margin-bottom:20px">
+      <div class="section-head">
+        <div>
+          <h2>Generated Production Schedule</h2>
+          <p class="sub" style="margin-bottom:0">Priority is considered first, then deadline, while machine availability is used to reduce idle time.</p>
+        </div>
+      </div>
+      <div id="scheduleEmpty" class="empty">No schedule yet. Add orders and click <b>Generate Schedule</b>.</div>
+      <div id="scheduleContent" style="display:none">
+        <div class="schedule-wrap"><div class="schedule" id="scheduleRows"></div></div>
+        <div class="legend"><span><i class="lg1"></i>High priority</span><span><i class="lg2"></i>Medium priority</span><span><i class="lg3"></i>Low priority</span></div>
+      </div>
+    </section>
+
+    <section id="results" class="panel">
+      <h2>Scheduling Results</h2>
+      <p class="sub">These values are calculated from the current prototype schedule. They are not claims about real factory performance.</p>
+      <div class="results-grid">
+        <div class="result-box"><span>Total Makespan</span><b id="rMakespan">—</b></div>
+        <div class="result-box"><span>Average Waiting Time</span><b id="rWait">—</b></div>
+        <div class="result-box"><span>Average Utilization</span><b id="rUtil">—</b></div>
+        <div class="result-box"><span>Delayed Orders</span><b id="rDelayed">—</b></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const state = {
+    orders: [],
+    machines: [
+      {name:"Machine A", capacity:100, available:0},
+      {name:"Machine B", capacity:100, available:0},
+      {name:"Machine C", capacity:100, available:0}
+    ],
+    schedule: []
+  };
+
+  const el = id => document.getElementById(id);
+  const toast = msg => {
+    el("toast").textContent = msg;
+    el("toast").classList.add("show");
+    setTimeout(()=>el("toast").classList.remove("show"),2200);
+  };
+
+  function minutesFromTime(t){
+    if(!t) return 24*60;
+    const [h,m]=t.split(":").map(Number);
+    return h*60+m;
+  }
+  function timeFromMinutes(min){
+    min = Math.max(0, Math.round(min));
+    const h = Math.floor(min/60)%24, m=min%60;
+    return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+  }
+  function priorityScore(p){ return ({High:3,Medium:2,Low:1})[p] || 1; }
+
+  function renderMachines(){
+    const list=el("machineList"); list.innerHTML="";
+    state.machines.forEach((m,i)=>{
+      const row=document.createElement("div");
+      row.className="machine-row";
+      row.innerHTML=`
+        <input value="${escapeHtml(m.name)}" data-k="name" data-i="${i}" aria-label="Machine name">
+        <input type="number" min="1" value="${m.capacity}" data-k="capacity" data-i="${i}" aria-label="Capacity">
+        <input type="number" min="0" value="${m.available}" data-k="available" data-i="${i}" aria-label="Availability minute">
+        <button class="icon-btn" data-remove-machine="${i}" title="Remove machine">×</button>`;
+      list.appendChild(row);
+    });
+    list.querySelectorAll("input").forEach(inp=>inp.addEventListener("change",e=>{
+      const i=+e.target.dataset.i, k=e.target.dataset.k;
+      state.machines[i][k]=k==="name"?e.target.value:Number(e.target.value||0);
+      renderMachineOptions(); updateMetrics();
+    }));
+    list.querySelectorAll("[data-remove-machine]").forEach(btn=>btn.addEventListener("click",()=>{
+      if(state.machines.length<=1){toast("Keep at least one machine.");return;}
+      state.machines.splice(+btn.dataset.removeMachine,1);renderMachines();renderMachineOptions();updateMetrics();
+    }));
+  }
+
+  function renderMachineOptions(){
+    const sel=el("requiredMachine");
+    const current=sel.value;
+    sel.innerHTML=`<option value="">Auto-select earliest available machine</option>`+
+      state.machines.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join("");
+    if([...sel.options].some(o=>o.value===current)) sel.value=current;
+  }
+
+  function escapeHtml(s=""){
+    return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+  }
+
+  function renderOrders(){
+    const body=el("ordersBody"); body.innerHTML="";
+    if(state.orders.length===0){
+      body.innerHTML=`<tr><td colspan="8" style="text-align:center;color:#91a0b9;padding:26px">No production orders added yet.</td></tr>`;
+    } else {
+      state.orders.forEach((o,i)=>{
+        const tr=document.createElement("tr");
+        tr.innerHTML=`
+          <td>${escapeHtml(o.id)}</td><td>${escapeHtml(o.product)}</td><td>${o.quantity}</td>
+          <td><span class="badge ${o.priority.toLowerCase()}">${o.priority}</span></td>
+          <td>${o.processing} min</td><td>${o.deadline||"—"}</td><td>${escapeHtml(o.machine||"Auto")}</td>
+          <td><button class="icon-btn" data-remove-order="${i}" title="Remove order">×</button></td>`;
+        body.appendChild(tr);
+      });
+      body.querySelectorAll("[data-remove-order]").forEach(btn=>btn.addEventListener("click",()=>{
+        state.orders.splice(+btn.dataset.removeOrder,1);renderOrders();updateMetrics();
+      }));
+    }
+    updateMetrics();
+  }
+
+  function updateMetrics(){
+    el("mOrders").textContent=state.orders.length;
+    el("mMachines").textContent=state.machines.length;
+    el("mHigh").textContent=state.orders.filter(o=>o.priority==="High").length;
+    el("mScheduled").textContent=state.schedule.length;
+  }
+
+  el("addOrderBtn").addEventListener("click",()=>{
+    const id=el("orderId").value.trim() || `ORD-${String(state.orders.length+1).padStart(3,"0")}`;
+    const product=el("product").value.trim() || "Production Job";
+    const quantity=Number(el("quantity").value||1);
+    const processing=Number(el("processing").value||1);
+    state.orders.push({
+      id,product,quantity,
+      priority:el("priority").value,
+      processing,
+      deadline:el("deadline").value,
+      machine:el("requiredMachine").value
+    });
+    el("orderId").value=""; el("product").value="";
+    renderOrders(); toast("Order added to the queue.");
+  });
+
+  el("loadDemoBtn").addEventListener("click",()=>{
+    state.orders=[
+      {id:"ORD-101",product:"Assembly Batch A",quantity:120,priority:"High",processing:75,deadline:"11:30",machine:"Machine A"},
+      {id:"ORD-102",product:"Component Batch B",quantity:80,priority:"Medium",processing:50,deadline:"13:00",machine:""},
+      {id:"ORD-103",product:"Quality Test C",quantity:60,priority:"High",processing:40,deadline:"12:00",machine:"Machine B"},
+      {id:"ORD-104",product:"Packaging Batch D",quantity:150,priority:"Low",processing:55,deadline:"16:30",machine:""},
+      {id:"ORD-105",product:"Urgent Rework E",quantity:35,priority:"High",processing:30,deadline:"10:30",machine:""}
+    ];
+    renderOrders(); toast("Demo production data loaded.");
+  });
+
+  el("addMachineBtn").addEventListener("click",()=>{
+    state.machines.push({name:`Machine ${String.fromCharCode(65+state.machines.length)}`,capacity:100,available:0});
+    renderMachines();renderMachineOptions();updateMetrics();
+  });
+
+  el("clearOrdersBtn").addEventListener("click",()=>{
+    state.orders=[];state.schedule=[];renderOrders();renderSchedule();toast("Orders cleared.");
+  });
+
+  document.querySelectorAll(".tab").forEach(tab=>tab.addEventListener("click",()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".tab-pane").forEach(x=>x.classList.remove("active"));
+    tab.classList.add("active");el(tab.dataset.tab).classList.add("active");
+  }));
+
+  el("csvFile").addEventListener("change", e=>{
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{
+        const rows=parseCSV(reader.result);
+        if(rows.length<2) throw new Error("CSV has no data rows.");
+        const headers=rows[0].map(h=>h.trim());
+        const idx = name => headers.findIndex(h=>h.toLowerCase()===name.toLowerCase());
+        const required=["Order_ID","Product","Quantity","Priority","Processing_Time","Deadline","Required_Machine"];
+        const missing=required.filter(h=>idx(h)<0);
+        if(missing.length) throw new Error("Missing columns: "+missing.join(", "));
+        rows.slice(1).filter(r=>r.some(x=>x.trim()!=="")).forEach(r=>{
+          const p=(r[idx("Priority")]||"Low").trim();
+          state.orders.push({
+            id:(r[idx("Order_ID")]||`ORD-${state.orders.length+1}`).trim(),
+            product:(r[idx("Product")]||"Production Job").trim(),
+            quantity:Number(r[idx("Quantity")]||1),
+            priority:["High","Medium","Low"].includes(p)?p:"Low",
+            processing:Number(r[idx("Processing_Time")]||1),
+            deadline:(r[idx("Deadline")]||"").trim(),
+            machine:(r[idx("Required_Machine")]||"").trim()
+          });
+        });
+        renderOrders();toast("CSV data imported successfully.");
+      }catch(err){toast(err.message);}
+    };
+    reader.readAsText(file);
+  });
+
+  function parseCSV(text){
+    const out=[]; let row=[],field="",quote=false;
+    for(let i=0;i<text.length;i++){
+      const c=text[i],n=text[i+1];
+      if(c==='"' && quote && n==='"'){field+='"';i++;}
+      else if(c==='"'){quote=!quote;}
+      else if(c==="," && !quote){row.push(field);field="";}
+      else if((c==="\n"||c==="\r")&&!quote){
+        if(c==="\r"&&n==="\n") i++;
+        row.push(field);out.push(row);row=[];field="";
+      }else field+=c;
+    }
+    if(field.length||row.length){row.push(field);out.push(row);}
+    return out;
+  }
+
+  el("generateBtn").addEventListener("click",()=>{
+    if(!state.orders.length){toast("Add at least one order first.");return;}
+    if(!state.machines.length){toast("Add at least one machine.");return;}
+    generateSchedule();renderSchedule();toast("Production schedule generated.");
+  });
+
+  function generateSchedule(){
+    const machineState=state.machines.map(m=>({...m, next:Number(m.available||0), busy:0}));
+    const sorted=[...state.orders].sort((a,b)=>{
+      const p=priorityScore(b.priority)-priorityScore(a.priority);
+      if(p!==0) return p;
+      return minutesFromTime(a.deadline)-minutesFromTime(b.deadline);
+    });
+    const schedule=[];
+    sorted.forEach(order=>{
+      let candidates=machineState;
+      if(order.machine){
+        const fixed=machineState.find(m=>m.name===order.machine);
+        if(fixed) candidates=[fixed];
+      }
+      const chosen=[...candidates].sort((a,b)=>a.next-b.next || b.capacity-a.capacity)[0];
+      const duration=Math.max(1, Math.ceil(order.processing * (100/Math.max(1,chosen.capacity))));
+      const start=chosen.next, end=start+duration;
+      chosen.next=end; chosen.busy+=duration;
+      schedule.push({...order,assignedMachine:chosen.name,start,end,duration,delay:Math.max(0,end-minutesFromTime(order.deadline))});
+    });
+    state.schedule=schedule;
+    state.machineStats=machineState;
+    updateMetrics();
+  }
+
+  function renderSchedule(){
+    const empty=el("scheduleEmpty"), content=el("scheduleContent"), rows=el("scheduleRows");
+    rows.innerHTML="";
+    if(!state.schedule.length){
+      empty.style.display="block";content.style.display="none";
+      ["rMakespan","rWait","rUtil","rDelayed"].forEach(id=>el(id).textContent="—");
+      updateMetrics();return;
+    }
+    empty.style.display="none";content.style.display="block";
+    const maxEnd=Math.max(...state.schedule.map(s=>s.end),1);
+    state.machines.forEach(m=>{
+      const row=document.createElement("div");row.className="sched-row";
+      const jobs=state.schedule.filter(s=>s.assignedMachine===m.name);
+      row.innerHTML=`<div class="machine-name">${escapeHtml(m.name)}<br><span style="color:#91a0b9;font-weight:500">Capacity ${m.capacity}</span></div><div class="timeline"></div>`;
+      const timeline=row.querySelector(".timeline");
+      jobs.forEach(j=>{
+        const task=document.createElement("div");
+        task.className="task "+(j.priority==="Medium"?"medium-task":j.priority==="Low"?"low-task":"");
+        task.style.left=(j.start/maxEnd*100)+"%";
+        task.style.width=Math.max(4,(j.duration/maxEnd*100))+"%";
+        task.innerHTML=`<b>${escapeHtml(j.id)} · ${escapeHtml(j.product)}</b><span>${timeFromMinutes(j.start)}–${timeFromMinutes(j.end)}</span>`;
+        timeline.appendChild(task);
+      });
+      rows.appendChild(row);
+    });
+
+    const makespan=Math.max(...state.schedule.map(s=>s.end));
+    const avgWait=state.schedule.reduce((a,s)=>a+s.start,0)/state.schedule.length;
+    const util=state.machineStats.reduce((a,m)=>a+(makespan?m.busy/makespan*100:0),0)/state.machineStats.length;
+    const delayed=state.schedule.filter(s=>s.delay>0).length;
+    el("rMakespan").textContent=`${makespan} min`;
+    el("rWait").textContent=`${avgWait.toFixed(1)} min`;
+    el("rUtil").textContent=`${util.toFixed(1)}%`;
+    el("rDelayed").textContent=delayed;
+    updateMetrics();
+  }
+
+  renderMachines();renderMachineOptions();renderOrders();renderSchedule();
+</script>
+</body>
+</html>
